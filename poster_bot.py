@@ -66,9 +66,9 @@ from commands_admin import (
     stats_command, failed_command, retry_command,
     notify_command, broadcast_command,
     settmdbnotify_command,
-    # ── New: shortener + caption version ──────────────────────
+    # Shortener + post customisation
     setshortener_command, removeshortener_command, shortenerinfo_command,
-    setcaptionversion_command, setv2header_command, sethowtodl_command,
+    sethowtodl_command, setextralines_command, setshare_command,
 )
 from commands_user import (
     myinfo_command, recentposts_command,
@@ -292,17 +292,17 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("editposter",      editposter_command))
 
     # 25002500 Admin 2014 TMDB notify toggle 250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500
-    app.add_handler(CommandHandler("settmdbnotify",   settmdbnotify_command))
+    app.add_handler(CommandHandler("settmdbnotify",     settmdbnotify_command))
 
-    # ── Shortener ─────────────────────────────────────────────
+    # Shortener
     app.add_handler(CommandHandler("setshortener",      setshortener_command))
     app.add_handler(CommandHandler("removeshortener",   removeshortener_command))
     app.add_handler(CommandHandler("shortenerinfo",     shortenerinfo_command))
 
-    # ── Caption version (v1 / v2) ─────────────────────────────
-    app.add_handler(CommandHandler("setcaptionversion", setcaptionversion_command))
-    app.add_handler(CommandHandler("setv2header",       setv2header_command))
+    # Post customisation
     app.add_handler(CommandHandler("sethowtodl",        sethowtodl_command))
+    app.add_handler(CommandHandler("setextralines",     setextralines_command))
+    app.add_handler(CommandHandler("setshare",          setshare_command))
 
     # ── Photo handler — /editposter via image ─────────────────
     app.add_handler(MessageHandler(
@@ -336,4 +336,4 @@ if __name__ == "__main__":
     finally:
         # ── Marks clean exit so atexit doesn't double-send ────
         _notified_offline = True
-
+  
