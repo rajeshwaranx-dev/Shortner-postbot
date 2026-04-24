@@ -55,7 +55,6 @@ from config import log
 from database import find_user_by_log_channel, save_post, delete_post
 from parser import parse_log_message, extract_button_entry, already_stored, movie_key, ep_num
 from caption import build_caption, send_post
-from caption_v2 import build_caption_v2, send_post_v2
 from tmdb import fetch_tmdb
 from helpers import add_failed, update_stats, notify_admins
 import state
@@ -86,7 +85,6 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     async with state.state_lock:
-        parsed["_raw_text"] = text          # stored for v2 size extraction
         state.pending.setdefault(channel_id, {})[msg.message_id] = parsed
         log.info("⏳ [%s] Pending msg_id=%d → %r", user["_id"], msg.message_id, parsed["title"])
 
@@ -122,6 +120,12 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not file_entry:
         return
 
+    # Pass size + watch_url from meta into file_entry if missing
+    if not file_entry.get("size"):
+        file_entry["size"] = meta.get("size", "")
+    if not file_entry.get("watch_url"):
+        file_entry["watch_url"] = meta.get("watch_url", "")
+
     title     = meta["title"]
     year      = meta.get("year")
     languages = meta.get("languages", [])
@@ -145,33 +149,23 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
         log.warning("User %s has no public channels configured", user_name)
         return
 
-    # raw log-channel text — for v2 size extraction
-    raw_text = meta.get("_raw_text", text)
-
-    # caption version for this user (v1 = default, v2 = new format)
-    cap_version = user.get("caption_version", "v1")
-
     is_multi = len(languages) > 1  # True = multi audio (2+ languages)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Helper: send a brand-new post and register it in state + DB
     # ──────────────────────────────────────────────────────────────────────────
     async def _send_new(target_channel: str, mkey: str, data: dict) -> bool:
+        if not data.get("size"):
+            data["size"] = meta.get("size", "")
         try:
-            if cap_version == "v2":
-                caption = await build_caption_v2(data, user, raw_caption=raw_text)
-            else:
-                caption = await build_caption(data, user)
+            caption = await build_caption(data, user)
         except Exception as exc:
             log.error("build_caption failed mkey=%r ch=%s: %s", mkey, target_channel, exc)
             add_failed(user_name, target_channel, "", tmdb_poster, str(exc), mkey=mkey)
             return False
 
         try:
-            if cap_version == "v2":
-                sent = await send_post_v2(context.bot, target_channel, tmdb_poster, caption, user)
-            else:
-                sent = await send_post(context.bot, target_channel, tmdb_poster, caption, user)
+            sent = await send_post(context.bot, target_channel, tmdb_poster, caption, user)
         except Exception as exc:
             log.error("send_post failed mkey=%r ch=%s: %s", mkey, target_channel, exc)
             add_failed(user_name, target_channel, caption, tmdb_poster, str(exc), mkey=mkey)
@@ -194,11 +188,10 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # ──────────────────────────────────────────────────────────────────────────
     async def _edit(target_channel: str, mkey: str, data: dict,
                     trig_file: dict) -> bool:
+        if not data.get("size"):
+            data["size"] = meta.get("size", "")
         try:
-            if cap_version == "v2":
-                caption = await build_caption_v2(data, user, raw_caption=raw_text)
-            else:
-                caption = await build_caption(data, user)
+            caption = await build_caption(data, user)
         except Exception as exc:
             log.error("build_caption failed mkey=%r ch=%s: %s", mkey, target_channel, exc)
             add_failed(user_name, target_channel, "", tmdb_poster, str(exc), mkey=mkey)
@@ -240,6 +233,7 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     "quality_label": meta.get("quality_label", "WEB-DL"),
                     "is_series":     meta.get("is_series", False),
                     "filename":      meta.get("filename", ""),
+                    "size":          meta.get("size", ""),
                     "files":         [copy.deepcopy(trig_file)],
                     "tmdb_rating":   tmdb_rating,
                     "message_id":    None,
@@ -309,6 +303,7 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             "quality_label": meta.get("quality_label", "WEB-DL"),
                             "is_series":     meta.get("is_series", False),
                             "filename":      meta.get("filename", ""),
+                            "size":          meta.get("size", ""),
                             "files":         [ch_file],
                             "tmdb_rating":   tmdb_rating,
                             "message_id":    None,
@@ -382,6 +377,7 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     "quality_label": meta.get("quality_label", "WEB-DL"),
                     "is_series":     meta.get("is_series", False),
                     "filename":      meta.get("filename", ""),
+                    "size":          meta.get("size", ""),
                     "files":         multi_files + [ch_file],
                     "tmdb_rating":   tmdb_rating,
                     "message_id":    None,
@@ -400,4 +396,4 @@ async def handle_edited_post(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for ch, res in zip(public_channels, results):
         if isinstance(res, Exception):
             log.error("Unhandled error posting to ch=%s: %s", ch, res)
-  
+                      
