@@ -100,17 +100,7 @@ async def commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/deletepost title — Delete a post from channel + database\n"
         "/editposter Movie Title — Replace wrong or missing poster (send with photo)\n"
         "\n<b>⚙️ Admin — TMDB Notify</b>\n"
-        "/settmdbnotify name on|off — Toggle TMDB miss DM for a user\n\n"
-        "<b>🔗 URL Shortener (Admin)</b>\n"
-        "/setshortener name provider api_key — Set shortener\n"
-        "/removeshortener name — Remove shortener (direct links)\n"
-        "/shortenerinfo name — Show shortener config\n"
-        "Providers: gplinks | shrinkme | ouo | earnl | techywebtech | shortlinks | droplink | cutly | direct\n\n"
-        "<b>📄 Caption Version (Admin)</b>\n"
-        "/setcaptionversion name v1|v2 — Switch caption format\n"
-        "/setv2header name Text — Set v2 blockquote header line\n"
-        "/sethowtodl name https://... — Set v2 footer How-to-Download link\n"
-        "v1 = Original format | v2 = New format with short links + blockquotes\n"
+        "/settmdbnotify name on|off — Toggle TMDB miss DM for a user\n"
     )
     await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
@@ -946,24 +936,15 @@ VALID_PROVIDERS = [
 async def setshortener_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /setshortener name provider api_key
-    Set URL shortener for a user.
-
-    Providers: gplinks | shrinkme | ouo | earnl | techywebtech |
-               shortlinks | droplink | cutly | direct
-
-    Examples:
-      /setshortener rajesh gplinks YOUR_API_KEY
-      /setshortener rajesh direct -        ← disables shortening
+    Providers: gplinks | shrinkme | ouo | earnl | techywebtech | shortlinks | droplink | cutly | direct
     """
     msg  = update.message
     args = context.args
     if len(args) < 3:
-        providers = " | ".join(VALID_PROVIDERS)
         await msg.reply_text(
-            f"Usage: /setshortener name provider api_key\n\n"
-            f"Providers: {providers}\n\n"
-            f"Example:\n/setshortener rajesh gplinks YOUR_API_KEY\n"
-            f"/setshortener rajesh direct -   (disables shortening)",
+            "Usage: /setshortener name provider api_key\n\n"
+            "Providers: " + " | ".join(VALID_PROVIDERS) + "\n\n"
+            "Use 'direct' to disable shortening."
         )
         return
 
@@ -972,11 +953,7 @@ async def setshortener_command(update: Update, context: ContextTypes.DEFAULT_TYP
     api_key  = args[2].strip()
 
     if provider not in VALID_PROVIDERS:
-        await msg.reply_text(
-            f"❌ Unknown provider: <b>{provider}</b>\n\n"
-            f"Valid providers: {' | '.join(VALID_PROVIDERS)}",
-            parse_mode=ParseMode.HTML,
-        )
+        await msg.reply_text(f"❌ Unknown provider: <b>{provider}</b>", parse_mode=ParseMode.HTML)
         return
 
     user = await load_user(name)
@@ -989,8 +966,7 @@ async def setshortener_command(update: Update, context: ContextTypes.DEFAULT_TYP
         user["shortener_api"]      = ""
         await save_user(user)
         await msg.reply_text(
-            f"✅ Shortener <b>disabled</b> for <b>{name}</b>.\n"
-            f"Direct filestore/worker links will be used.",
+            f"✅ Shortener <b>disabled</b> for <b>{name}</b>. Direct links will be used.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -998,33 +974,28 @@ async def setshortener_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user["shortener_provider"] = provider
     user["shortener_api"]      = api_key
     await save_user(user)
+    masked = f"{api_key[:6]}...{api_key[-4:]}" if len(api_key) > 10 else api_key
     await msg.reply_text(
         f"✅ Shortener set for <b>{name}</b>:\n\n"
         f"🔗 Provider : <b>{provider}</b>\n"
-        f"🔑 API Key  : <code>{api_key[:6]}...{api_key[-4:]}</code>",
+        f"🔑 API Key  : <code>{masked}</code>",
         parse_mode=ParseMode.HTML,
     )
-    log.info("🔗 Shortener set for user=%s provider=%s", name, provider)
 
 
 @admin_only
 async def removeshortener_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /removeshortener name
-    Remove shortener — falls back to direct links.
-    """
+    """/removeshortener name"""
     msg  = update.message
     args = context.args
     if not args:
         await msg.reply_text("Usage: /removeshortener name")
         return
-
     name = args[0].lower().strip()
     user = await load_user(name)
     if not user:
         await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
         return
-
     user.pop("shortener_provider", None)
     user.pop("shortener_api", None)
     await save_user(user)
@@ -1036,125 +1007,26 @@ async def removeshortener_command(update: Update, context: ContextTypes.DEFAULT_
 
 @admin_only
 async def shortenerinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /shortenerinfo name
-    Show current shortener configuration for a user.
-    """
+    """/shortenerinfo name"""
     msg  = update.message
     args = context.args
     if not args:
         await msg.reply_text("Usage: /shortenerinfo name")
         return
-
     name = args[0].lower().strip()
     user = await load_user(name)
     if not user:
         await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
         return
-
     provider = user.get("shortener_provider", "direct")
     api_key  = user.get("shortener_api", "")
-    cap_ver  = user.get("caption_version", "v1")
-
     if provider == "direct" or not api_key:
         short_status = "🔴 Disabled (direct links)"
     else:
         masked = f"{api_key[:6]}...{api_key[-4:]}" if len(api_key) > 10 else api_key
         short_status = f"🟢 {provider} | Key: <code>{masked}</code>"
-
     await msg.reply_text(
-        f"🔗 <b>Shortener Info — {name}</b>\n\n"
-        f"Provider   : {short_status}\n"
-        f"Caption Ver: <b>{cap_ver.upper()}</b>",
-        parse_mode=ParseMode.HTML,
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  CAPTION VERSION COMMANDS (v1 / v2)
-# ══════════════════════════════════════════════════════════════════════════════
-
-@admin_only
-async def setcaptionversion_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /setcaptionversion name v1|v2
-
-    v1 = original format (existing caption.py)
-    v2 = new format with shortener support (caption_v2.py)
-
-    Example:
-      /setcaptionversion rajesh v2
-    """
-    msg  = update.message
-    args = context.args
-    if len(args) < 2:
-        await msg.reply_text(
-            "Usage: /setcaptionversion name v1|v2\n\n"
-            "v1 = Original caption format\n"
-            "v2 = New format with shortener + blockquote header/footer\n\n"
-            "Example: /setcaptionversion rajesh v2"
-        )
-        return
-
-    name    = args[0].lower().strip()
-    version = args[1].lower().strip()
-    if version not in ("v1", "v2"):
-        await msg.reply_text("❌ Version must be <b>v1</b> or <b>v2</b>.", parse_mode=ParseMode.HTML)
-        return
-
-    user = await load_user(name)
-    if not user:
-        await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
-        return
-
-    user["caption_version"] = version
-    await save_user(user)
-
-    desc = (
-        "New format — blockquote header/footer, per-file short links"
-        if version == "v2"
-        else "Original format — quality badges, batch link, join text"
-    )
-    await msg.reply_text(
-        f"✅ Caption version set to <b>{version.upper()}</b> for <b>{name}</b>.\n\n"
-        f"📄 {desc}",
-        parse_mode=ParseMode.HTML,
-    )
-    log.info("📄 Caption version set to %s for user=%s", version, name)
-
-
-@admin_only
-async def setv2header_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /setv2header name Text
-    Set the blockquote header line for v2 posts.
-    Default: 📥 Watch Online Or Fast Download 🚀
-
-    Example:
-      /setv2header rajesh 📥 Fast Download 🚀
-    """
-    msg  = update.message
-    args = context.args
-    if len(args) < 2:
-        await msg.reply_text(
-            "Usage: /setv2header name Your Header Text\n\n"
-            "Example: /setv2header rajesh 📥 Fast Download 🚀\n\n"
-            "Default: 📥 Watch Online Or Fast Download 🚀"
-        )
-        return
-
-    name        = args[0].lower().strip()
-    header_text = " ".join(args[1:]).strip()
-
-    user = await load_user(name)
-    if not user:
-        await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
-        return
-
-    user["v2_header_text"] = header_text
-    await save_user(user)
-    await msg.reply_text(
-        f"✅ V2 header set for <b>{name}</b>:\n\n<blockquote>{header_text}</blockquote>",
+        f"🔗 <b>Shortener Info — {name}</b>\n\nProvider: {short_status}",
         parse_mode=ParseMode.HTML,
     )
 
@@ -1162,32 +1034,73 @@ async def setv2header_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 @admin_only
 async def sethowtodl_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /sethowtodl name https://t.me/channel/123
-    Set the 'How to Download' link shown in v2 footer blockquote.
-
-    Example:
-      /sethowtodl rajesh https://t.me/how_to_download_dulink/41
+    /sethowtodl name https://t.me/...
+    Set the How To Download link shown in post footer.
     """
     msg  = update.message
     args = context.args
     if len(args) < 2:
-        await msg.reply_text(
-            "Usage: /sethowtodl name https://t.me/...\n\n"
-            "Example: /sethowtodl rajesh https://t.me/how_to_download_dulink/41"
-        )
+        await msg.reply_text("Usage: /sethowtodl name https://t.me/...")
         return
-
     name    = args[0].lower().strip()
     how_url = args[1].strip()
-
     user = await load_user(name)
     if not user:
         await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
         return
-
     user["how_to_link"] = how_url
     await save_user(user)
     await msg.reply_text(
         f"✅ How-to-download link set for <b>{name}</b>:\n{how_url}",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@admin_only
+async def setextralines_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /setextralines name Your extra line text
+    Set the extra line shown below the note (default: 🚀 Use Chrome Speed Download).
+    """
+    msg  = update.message
+    args = context.args
+    if len(args) < 2:
+        await msg.reply_text("Usage: /setextralines name Your text here")
+        return
+    name = args[0].lower().strip()
+    text = " ".join(args[1:]).strip()
+    user = await load_user(name)
+    if not user:
+        await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
+        return
+    user["extra_lines"] = text
+    await save_user(user)
+    await msg.reply_text(
+        f"✅ Extra line set for <b>{name}</b>:\n{text}",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@admin_only
+async def setshare_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /setshare name Your share line
+    Set the share and support line at the bottom of posts.
+    """
+    msg  = update.message
+    args = context.args
+    if len(args) < 2:
+        await msg.reply_text("Usage: /setshare name Your share line")
+        return
+    name = args[0].lower().strip()
+    text = " ".join(args[1:]).strip()
+    user = await load_user(name)
+    if not user:
+        await msg.reply_text(f"❌ User <b>{name}</b> not found.", parse_mode=ParseMode.HTML)
+        return
+    user["share_line"] = text
+    await save_user(user)
+    await msg.reply_text(
+        f"✅ Share line set for <b>{name}</b>:\n{text}",
         parse_mode=ParseMode.HTML,
     )
