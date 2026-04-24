@@ -12,6 +12,33 @@ SPLIT_PAT    = re.compile(
     r"\b(WEB-DL|HDRip|BluRay|WEBRip|HDCAM|480p|720p|1080p|4K|HQ|CAMRip|TRUE)\b",
     re.IGNORECASE,
 )
+
+SIZE_RE = re.compile(r"\b(\d+(?:\.\d+)?\s*(?:GB|MB|KB))\b", re.IGNORECASE)
+
+WATCH_URL_RE = re.compile(
+    r"https?://\S+(?:workers\.dev|vercel\.app|pages\.dev|onrender\.com|watch)\S*",
+    re.IGNORECASE,
+)
+
+
+def extract_size(text: str) -> str:
+    m = SIZE_RE.search(text or "")
+    return m.group(1).upper().replace(" ", "") if m else ""
+
+
+def extract_watch_url(text: str) -> str:
+    m = WATCH_URL_RE.search(text or "")
+    if m:
+        return m.group(0).strip()
+    lines = (text or "").splitlines()
+    for i, line in enumerate(lines):
+        if re.search(r"fast.?download|watch.?now|online.?watch|stream", line, re.IGNORECASE):
+            for check in [line] + (lines[i+1:i+2]):
+                url_m = re.search(r"https?://\S+", check)
+                if url_m:
+                    return url_m.group(0).strip()
+    return ""
+
 GENERIC_RE = re.compile(
     r"^[\W\s]*(get\s+shar|download|click\s+here|open|get\s+file|watch|stream)\b",
     re.IGNORECASE,
@@ -102,6 +129,9 @@ def parse_log_message(text: str) -> dict | None:
         re.search(r"\bEP?\s*\(?\d", first_line, re.IGNORECASE)
     )
 
+    size      = extract_size(first_line) or extract_size(text)
+    watch_url = extract_watch_url(text)
+
     return {
         "title":         title,
         "year":          year,
@@ -110,6 +140,9 @@ def parse_log_message(text: str) -> dict | None:
         "quality_label": quality_label,
         "languages":     languages,
         "is_series":     is_series,
+        "size":          size,
+        "watch_url":     watch_url,
+        "_raw_text":     text,
     }
 
 
@@ -153,6 +186,8 @@ def extract_button_entry(text: str, reply_markup, meta: dict) -> dict | None:
                         "quality":      quality,
                         "link":         url,
                         "file_id":      fid,
+                        "watch_url":    meta.get("watch_url", ""),
+                        "size":         meta.get("size", ""),
                     }
                     ep_m        = EP_RE.search(display)
                     entry["ep"] = int(ep_m.group(1) or ep_m.group(2)) if ep_m else None
@@ -180,3 +215,4 @@ def movie_key(title: str, year, channel_id: str = "", lang: str = "") -> str:
     lang_key = re.sub(r"[^a-z0-9]", "", lang.lower()) if lang else ""
     base     = f"{title}_{year or ''}_{lang_key}_{suffix}" if lang_key else f"{title}_{year or ''}_{suffix}"
     return re.sub(r"\s+", "_", base.lower())
+    
